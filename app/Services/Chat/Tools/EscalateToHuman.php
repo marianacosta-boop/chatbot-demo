@@ -23,23 +23,48 @@ class EscalateToHuman implements Tool
                     'subject'  => ['type' => 'string'],
                     'summary'  => ['type' => 'string', 'description' => 'Short summary of the conversation so far'],
                     'priority' => ['type' => 'string', 'enum' => ['Low', 'Medium', 'High']],
+                    'asset_id' => ['type' => 'string', 'description' => 'asset_id of the expiring product related to this request, when applicable'],
                 ],
                 'required' => ['subject', 'summary'],
             ],
         ];
     }
 
-    public function handle(array $input, User $user): array
+    public function handle(array $input, ?User $user): array
     {
+        if (! $user) {
+            return ['error' => 'An authenticated client is required.'];
+        }
+
+        $snapshot = app(ClientContextService::class)->snapshot($user);
+
         $case = $this->sf->createCase([
-            'AccountId'   => app(ClientContextService::class)->snapshot($user)['account']['id'],
-            'ContactId'   => app(ClientContextService::class)->snapshot($user)['contact']['id'] ?? null,
+            'AccountId'   => $snapshot['account']['id'],
+            'ContactId'   => $snapshot['contact']['id'] ?? null,
             'Subject'     => $input['subject'],
             'Description' => $input['summary'],
             'Priority'    => $input['priority'] ?? 'Medium',
             'Origin'      => 'Web chatbot',
+            'Opportunity__c' => $this->expiringOpportunityId($input, $snapshot),
+            'Platform__c' => 'acinGov',
         ]);
 
         return ['status' => 'created', 'case_number' => $case['CaseNumber']];
+    }
+
+    private function expiringOpportunityId(array $input, array $snapshot): ?string
+    {
+        $expiringProducts = collect($snapshot['products'] ?? [])->where('expiring_soon', true);
+        $assetId = $input['asset_id'] ?? ($expiringProducts->count() === 1
+            ? $expiringProducts->first()['asset_id']
+            : null);
+
+        if (! $assetId || ! $expiringProducts->contains('asset_id', $assetId)) {
+            return null;
+        }
+
+        $asset = $this->sf->asset($assetId, $snapshot['account']['id']);
+
+        return $asset['OpportunityId'] ?? null;
     }
 }

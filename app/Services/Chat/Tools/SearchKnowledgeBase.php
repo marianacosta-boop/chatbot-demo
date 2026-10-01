@@ -26,7 +26,7 @@ class SearchKnowledgeBase implements Tool
         ];
     }
 
-    public function handle(array $input, User $user): array
+    public function handle(array $input, ?User $user): array
     {
         return ['results' => $this->retriever->search($input['query'], limit: 5)];  // [['title','excerpt','url'], ...]
     }

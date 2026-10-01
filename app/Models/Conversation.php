@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Conversation extends Model
 {
-    protected $fillable = ['user_id'];
+    protected $fillable = ['user_id', 'guest_session_id'];
 
     public function user() { return $this->belongsTo(User::class); }
     public function messages() { return $this->hasMany(Message::class); }

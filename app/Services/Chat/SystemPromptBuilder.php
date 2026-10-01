@@ -13,4 +13,9 @@ class SystemPromptBuilder
             '{{CLIENT_SNAPSHOT_JSON}}' => json_encode($snapshot, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE),
         ]);
     }
+
+    public function buildGuest(): string
+    {
+        return file_get_contents(resource_path('prompts/chatbot-guest-system.md'));
+    }
 }

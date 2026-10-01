@@ -16,16 +16,18 @@ class ChatService
     ) {}
 
     /** First turn: no real user message; the model is asked to greet and raise expiring products. */
-    public function open(Conversation $conversation): string
+    public function open(Conversation $conversation, ?\Closure $onChunk = null): string
     {
-        return $this->reply($conversation, '[conversation_start]', hidden: true);
+        return $this->reply($conversation, '[conversation_start]', hidden: true, onChunk: $onChunk);
     }
 
-    public function reply(Conversation $conversation, string $userMessage, bool $hidden = false): string
+    /** @param \Closure|null $onChunk when given, the reply is streamed and each text delta is passed to it as it arrives. */
+    public function reply(Conversation $conversation, string $userMessage, bool $hidden = false, ?\Closure $onChunk = null): string
     {
         $user     = $conversation->user;
-        $snapshot = $this->context->snapshot($user);          // cached array from Salesforce
-        $system   = $this->prompt->build($snapshot);
+        $system   = $user
+            ? $this->prompt->build($this->context->snapshot($user))
+            : $this->prompt->buildGuest();
 
         if (! $hidden) {
             $conversation->messages()->create(['role' => 'user', 'content' => $userMessage]);
@@ -36,16 +38,20 @@ class ChatService
             $messages[] = ['role' => 'user', 'content' => $userMessage];
         }
 
+        $tools  = $this->tools->definitions(guest: ! $user);
         $rounds = 0;
+        $textParts = [];
         while (true) {
-            $response = $this->claude->messages(
-                system: $system,
-                messages: $messages,
-                tools: $this->tools->definitions(),
-            );
+            $response = $onChunk
+                ? $this->claude->stream($system, $messages, $tools, $onChunk)
+                : $this->claude->messages($system, $messages, $tools);
 
             // Append the assistant turn exactly as returned (text + tool_use blocks).
             $messages[] = ['role' => 'assistant', 'content' => $response['content']];
+            $roundText = collect($response['content'])->where('type', 'text')->pluck('text')->implode("\n");
+            if ($roundText !== '') {
+                $textParts[] = $roundText;
+            }
 
             if ($response['stop_reason'] !== 'tool_use' || ++$rounds > config('chatbot.max_tool_rounds')) {
                 break;
@@ -56,9 +62,9 @@ class ChatService
                 if ($block['type'] !== 'tool_use') {
                     continue;
                 }
-                Log::info('chatbot.tool_call', ['tool' => $block['name'], 'input' => $block['input'], 'user' => $user->id]);
+                Log::info('chatbot.tool_call', ['tool' => $block['name'], 'input' => $block['input'], 'user' => $user?->id]);
 
-                // The authenticated user is passed so tools can never act on another account.
+                // Guest conversations only receive public, non-account tools.
                 $output = $this->tools->execute($block['name'], $block['input'], $user);
 
                 $results[] = [
@@ -70,7 +76,7 @@ class ChatService
             $messages[] = ['role' => 'user', 'content' => $results];
         }
 
-        $text = collect($response['content'])->where('type', 'text')->pluck('text')->implode("\n");
+        $text = implode("\n", $textParts);
 
         $conversation->messages()->create(['role' => 'assistant', 'content' => $text]);
 

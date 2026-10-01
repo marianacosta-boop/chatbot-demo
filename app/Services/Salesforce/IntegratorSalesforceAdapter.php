@@ -2,6 +2,7 @@
 
 namespace App\Services\Salesforce;
 
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -119,7 +120,11 @@ Log::debug('integrator.call', ['method' => $method, 'endpoint' => $endpoint, 'st
         }
         $rows = $this->dispatch('GET', '/chatbot/cases', ['AccountId' => $accountId])['data'] ?? [];
 
-        return array_map(fn ($c) => ['CaseNumber' => $c['CaseNumber'], 'Subject' => $c['Subject'], 'Status' => $c['Status']], $rows);
+        return array_map(fn ($c) => [
+            'CaseNumber' => $c['caseNumber'] ?? $c['CaseNumber'] ?? null,
+            'Subject'    => $c['subject'] ?? $c['Subject'] ?? null,
+            'Status'     => $c['status'] ?? $c['Status'] ?? null,
+        ], $rows);
     }
 
     public function renewalOptions(array $asset): array
@@ -128,19 +133,26 @@ Log::debug('integrator.call', ['method' => $method, 'endpoint' => $endpoint, 'st
         if (! $product2Id) {
             return [];
         }
-        $rows = $this->dispatch('GET', '/chatbot/renewal-options', array_filter([
-            'Product2Id'  => $product2Id,
-            'PricebookId' => config('chatbot.integrator.pricebook_id'),
-        ]))['data'] ?? [];
 
-        return array_map(fn ($o) => [
-            'Id'             => $o['Id'],                       // PricebookEntry Id = option_id
-            'UnitPrice'      => (float) $o['UnitPrice'],
-            'Term_Months__c' => (int) ($o['TermMonths'] ?? 12),
-            'Is_Upgrade__c'  => (bool) ($o['IsUpgrade'] ?? false),
-            'Description'    => $o['Pitch'] ?? null,
-            'Product2'       => ['Id' => $o['Product2Id'], 'Name' => $o['Name'], 'ProductCode' => $o['ProductCode']],
-        ], $rows);
+        $pricebookId = config('chatbot.integrator.pricebook_id');
+        $cacheKey    = "integrator:renewal-options:{$product2Id}:" . ($pricebookId ?: 'default');
+
+        // Prices/options rarely change within a session; cache briefly to avoid a round trip on every ask.
+        return Cache::remember($cacheKey, 300, function () use ($product2Id, $pricebookId) {
+            $rows = $this->dispatch('GET', '/chatbot/renewal-options', array_filter([
+                'Product2Id'  => $product2Id,
+                'PricebookId' => $pricebookId,
+            ]))['data'] ?? [];
+
+            return array_map(fn ($o) => [
+                'Id'             => $o['Id'],                       // PricebookEntry Id = option_id
+                'UnitPrice'      => (float) $o['UnitPrice'],
+                'Term_Months__c' => (int) ($o['TermMonths'] ?? 12),
+                'Is_Upgrade__c'  => (bool) ($o['IsUpgrade'] ?? false),
+                'Description'    => $o['Pitch'] ?? null,
+                'Product2'       => ['Id' => $o['Product2Id'], 'Name' => $o['Name'], 'ProductCode' => $o['ProductCode']],
+            ], $rows);
+        });
     }
 
     // ---------- writes ----------
@@ -178,8 +190,22 @@ Log::debug('integrator.call', ['method' => $method, 'endpoint' => $endpoint, 'st
 
         $raw  = $this->dispatch('POST', '/chatbot/cases', $payload);
         $data = $raw['data'] ?? [];
+        $id   = $data['id'] ?? $data['Id'] ?? null;
+        $caseNumber = $data['caseNumber'] ?? $data['CaseNumber'] ?? null;
 
-        return ['Id' => $data['id'] ?? null, 'CaseNumber' => $data['CaseNumber'] ?? $data['id'] ?? null] + $payload;
+        if (! $caseNumber && $id) {
+            $cases = $this->dispatch('GET', '/chatbot/cases', ['AccountId' => $payload['AccountId']])['data'] ?? [];
+            $createdCase = collect($cases)->first(
+                fn ($case) => ($case['id'] ?? $case['Id'] ?? null) === $id,
+            );
+            $caseNumber = $createdCase['caseNumber'] ?? $createdCase['CaseNumber'] ?? null;
+        }
+
+        if (! $caseNumber) {
+            throw new \RuntimeException('Integrator created the case but did not return its case number.');
+        }
+
+        return ['Id' => $id, 'CaseNumber' => $caseNumber] + $payload;
     }
 
     // ---------- mapping ----------
@@ -195,6 +221,8 @@ Log::debug('integrator.call', ['method' => $method, 'endpoint' => $endpoint, 'st
             'Status'        => $a['Status'] ?? null,
             'Auto_Renew__c' => (bool) ($a['AutoRenew'] ?? false),
             'Renewed_By__c' => $a['RenewalOpportunityId'] ?? null,
+            'OpportunityId' => $a['OpportunityId'] ?? null,
+            'StampBalance'  => isset($a['StampBalance']) ? (int) $a['StampBalance'] : null,   // remaining créditos/selos, only set for Aquisição de créditos assets
             'Product2'      => ['Id' => $a['Product2Id'], 'Name' => $a['ProductName'], 'ProductCode' => $a['ProductCode'], 'Family' => $a['ProductFamily'] ?? null],
         ];
     }

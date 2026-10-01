@@ -11,6 +11,6 @@ interface Tool
     /** Definition sent to the model: ['name' => ..., 'description' => ..., 'input_schema' => JSON Schema]. */
     public function definition(): array;
 
-    /** Executes with the authenticated user; must never trust an account id coming from the model. */
-    public function handle(array $input, User $user): array|string;
+    /** Account-bound tools must never trust an account id coming from the model. */
+    public function handle(array $input, ?User $user): array|string;
 }

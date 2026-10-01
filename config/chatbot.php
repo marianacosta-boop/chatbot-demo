@@ -3,12 +3,16 @@
 return [
     // --- Anthropic ---
     'api_key'             => env('ANTHROPIC_API_KEY'),
-    'model'               => env('CHATBOT_MODEL', 'claude-sonnet-4-6'), // verify current IDs at platform.claude.com/docs
+    'model'               => env('CHATBOT_MODEL', 'claude-haiku-4-5-20251001'), // verify current IDs at platform.claude.com/docs
     'max_tokens'          => 1024,
     'max_tool_rounds'     => 6,
     'history_messages'    => 20,
     'renewal_window_days' => 30,
     'snapshot_cache_ttl'  => 600,
+
+    // --- Aquisição de créditos (stamp top-up) ---
+    'credits_product_code'       => env('ACINFORCE_CREDITS_PRODUCT_CODE', 'ACG017'),
+    'low_stamp_balance_threshold' => 40,
 
     // --- Acinforce integrator (HTTP API) ---
     'integrator' => [

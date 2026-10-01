@@ -17,15 +17,22 @@ class ToolRegistry
         }
     }
 
-    public function definitions(): array
+    public function definitions(bool $guest = false): array
     {
-        return array_values(array_map(fn (Tool $t) => $t->definition(), $this->tools));
+        $tools = $guest
+            ? array_filter($this->tools, fn (Tool $tool) => $tool->name() === 'search_knowledge_base')
+            : $this->tools;
+
+        return array_values(array_map(fn (Tool $t) => $t->definition(), $tools));
     }
 
-    public function execute(string $name, array $input, User $user): array|string
+    public function execute(string $name, array $input, ?User $user): array|string
     {
         if (! isset($this->tools[$name])) {
             return ['error' => "Unknown tool {$name}"];
+        }
+        if (! $user && $name !== 'search_knowledge_base') {
+            return ['error' => 'This tool requires an authenticated client.'];
         }
         try {
             return $this->tools[$name]->handle($input, $user);

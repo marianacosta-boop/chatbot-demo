@@ -27,8 +27,12 @@ class GetRenewalOptions implements Tool
         ];
     }
 
-    public function handle(array $input, User $user): array
+    public function handle(array $input, ?User $user): array
     {
+        if (! $user) {
+            return ['error' => 'An authenticated client is required.'];
+        }
+
         // Authorisation: the asset must belong to the logged-in client's account.
         $snapshot = app(ClientContextService::class)->snapshot($user);
         $asset    = $this->sf->asset($input['asset_id'], $snapshot['account']['id']);

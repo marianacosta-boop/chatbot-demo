@@ -29,8 +29,12 @@ class CreateRenewalOpportunity implements Tool
         ];
     }
 
-    public function handle(array $input, User $user): array
+    public function handle(array $input, ?User $user): array
     {
+        if (! $user) {
+            return ['error' => 'An authenticated client is required.'];
+        }
+
         $snapshot = app(ClientContextService::class)->snapshot($user);
 
         // Authorisation: the asset must be one of this client's products.

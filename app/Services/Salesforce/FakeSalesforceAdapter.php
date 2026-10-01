@@ -21,6 +21,9 @@ class FakeSalesforceAdapter implements SalesforceAdapter
             ['Id' => 'A-1003', 'AccountId' => '0013N00000xXNM0QAO', 'Quantity' => 1, 'UsageEndDate' => now()->addMonths(6)->toDateString(), 'Auto_Renew__c' => false,
              'Product2' => ['ProductCode' => 'ACG0032-N', 'Name' => 'Serviços Avançados Gold - Anual'],
              'Account' => ['Owner' => ['Name' => 'Rui Costa']]],
+            ['Id' => 'A-1004', 'AccountId' => '0013N00000xXNM0QAO', 'Quantity' => 1, 'UsageEndDate' => now()->addMonths(9)->toDateString(), 'Auto_Renew__c' => false, 'StampBalance' => 25,
+             'Product2' => ['ProductCode' => 'ACG017', 'Name' => 'Aquisição de créditos'],
+             'Account' => ['Owner' => ['Name' => 'Rui Costa']]],
         ];
     }
 
@@ -66,6 +69,12 @@ class FakeSalesforceAdapter implements SalesforceAdapter
         'A-1003' => [
             ['Id' => 'O-F12', 'Product2' => ['ProductCode' => 'ACG0032-N', 'Name' => 'Serviços Avançados Gold - Anual'],
              'Term_Months__c' => 12, 'UnitPrice' => 1350, 'Description' => null],
+        ],
+        'A-1004' => [
+            ['Id' => 'O-CRED100', 'Product2' => ['ProductCode' => 'ACG017', 'Name' => 'Aquisição de créditos'],
+             'Term_Months__c' => null, 'UnitPrice' => 90, 'Description' => 'Lote de 100 créditos acinGov'],
+            ['Id' => 'O-CRED300', 'Product2' => ['ProductCode' => 'ACG017', 'Name' => 'Aquisição de créditos'],
+             'Term_Months__c' => null, 'UnitPrice' => 250, 'Description' => 'Lote de 300 créditos acinGov'],
         ],
         default => [],
     };
